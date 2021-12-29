@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -8,7 +9,7 @@
 #include "sv.h"
 
 bool
-nextline(String_View *sv, FILE *stream)
+next_line(String_View *sv, FILE *stream)
 {
     errno = 0;
     char *lineptr = NULL;
@@ -27,26 +28,6 @@ nextline(String_View *sv, FILE *stream)
 }
 
 String_View
-slurp(FILE *fp)
-{
-    /* TODO: If we are actually going to alloc this shit we should probably at
-     * least realloc when we're out of space... */
-    const size_t buflen = 2048; 
-    char *buf = calloc(buflen, sizeof(*buf));
-    memset(buf, '\0', buflen);
-    size_t bufsz = 0;
-
-    for (bufsz = 0; bufsz < buflen; bufsz++) {
-        buf[bufsz] = fgetc(fp);
-        if (buf[bufsz] == EOF) {
-            break;
-        }
-    }
-
-    return sv_from_parts(buf, bufsz);
-}
-
-String_View
 execute(String_View command)
 {
     char *cmd = calloc(command.count, sizeof(*cmd));
@@ -60,45 +41,96 @@ execute(String_View command)
         exit(1);
     }
 
-    // TODO: Implement nextline()
-    char *buf = calloc(1028, sizeof(*buf));
-    if (buf == NULL) { exit(1); }
-    if (fgets(buf, 1028, pp) == NULL) { exit(1); }
-
-    return sv_trim_right(sv_from_parts(buf, strlen(buf)));
+    // TODO: Handle multi-line shell return?
+    String_View result;
+    next_line(&result, pp);
+    pclose(pp);
+    return result;
 }
 
-// Pre-process markdown input from stdin
-int
-main(void)
+// TODO: Only unescape recognised sequences
+String_View
+unescape(String_View sv)
+{
+    size_t index = 0;
+    if (!sv_index_of(sv, '\\', &index)) return sv;
+
+    char *data = calloc(sv.count, sizeof(*data));
+    size_t count = 0;
+    do {
+        memcpy(data + count, sv.data, index);
+        count += index;
+        data[count++] = sv.data[index + 1];
+        sv_chop_left(&sv, index + 2);
+    } while (sv_index_of(sv, '\\', &index));
+
+    memcpy(data + count, sv.data, sv.count);
+    count += sv.count;
+    return sv_from_parts(data, count);
+}
+
+bool
+index_of_delim(String_View sv, String_View delim, size_t *index)
+{
+    // Could not find
+    if (!sv_find(sv, delim, index)) return false;
+
+    // Found an escaped occurence
+    if (*index > 0 && *(sv.data + *index - 1) == '\\') {
+        *index += delim.count;
+        sv_chop_left(&sv, *index);
+
+        size_t nindex = 0;
+        if (!index_of_delim(sv, delim, &nindex)) return false;
+
+        *index += nindex;
+        return true;
+    }
+
+    return true;
+}
+
+void
+preprocess(FILE *src, FILE *dst)
 {
     String_View in;
     String_View sh_open = sv_from_cstr("$(");
     String_View sh_close = sv_from_cstr(")");
 
-    while (nextline(&in, stdin)) {
+    while (next_line(&in, src)) {
         String_View sv = in;
 
         while (sv.count > 0) {
             if (sv_starts_with(sv, sh_open)) {
                 sv_chop_left(&sv, sh_open.count);
                 size_t index = 0;
-                if (!sv_find(sv, sh_close, &index)) {
+                if (!index_of_delim(sv, sh_close, &index)) {
                     fprintf(stderr, "ERROR: Shell substring was not closed!\n");
                     exit(1);
                 }
-                String_View cmd = sv_chop_left(&sv, index);
+                String_View cmd = unescape(sv_chop_left(&sv, index));
                 String_View result = execute(cmd);
-                printf("[[[" SV_Fmt "]]]", SV_Arg(result));
+                fprintf(dst, SV_Fmt, SV_Arg(result));
                 sv_chop_left(&sv, sh_close.count); // Advance past closing delim
             } else {
-                printf("%c", *sv.data);
-                sv_chop_left(&sv, 1);
+                String_View chopped = sv_chop_left(&sv, 1);
+                fprintf(dst, SV_Fmt, SV_Arg(chopped));
+                if (sv_eq(chopped, SV("\\"))) {
+                    chopped = sv_chop_left(&sv, 1);
+                    fprintf(dst, SV_Fmt, SV_Arg(chopped));
+                }
             }
         }
 
-        putchar('\n');
+        fputc('\n', dst);
         free((char*)in.data);
     }
+}
+
+// Pre-process markdown input from stdin
+int
+main(void)
+{
+    preprocess(stdin, stdout);
 }
 

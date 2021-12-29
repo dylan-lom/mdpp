@@ -259,7 +259,7 @@ SVDEF String_View sv_take_left_while(String_View sv, bool (*predicate)(char x))
 SVDEF bool sv_find(String_View sv, String_View needle, size_t *index)
 {
     size_t i = 0;
-    while (i + needle.count < sv.count) {
+    while (i + needle.count - 1 < sv.count) {
         String_View slice = sv_from_parts(sv.data + i, needle.count);
         if (sv_eq(slice, needle)) {
             break;
@@ -267,7 +267,7 @@ SVDEF bool sv_find(String_View sv, String_View needle, size_t *index)
         i++;
     }
 
-    if (i + needle.count < sv.count) {
+    if (i + needle.count - 1 < sv.count) {
         if (index) {
             *index = i;
         }
