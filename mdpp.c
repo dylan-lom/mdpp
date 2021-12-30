@@ -8,6 +8,10 @@
 #define SV_IMPLEMENTATION
 #include "sv.h"
 
+typedef struct {
+    bool in_code_block;
+} Context;
+
 bool
 next_line(String_View *sv, FILE *stream)
 {
@@ -97,11 +101,19 @@ preprocess(FILE *src, FILE *dest)
     String_View sh_open = sv_from_cstr("$(");
     String_View sh_close = sv_from_cstr(")");
 
+    Context ctx = {0};
+
     while (next_line(&in, src)) {
         String_View sv = in;
 
+        if (sv_starts_with(sv, SV("    ")) || sv_starts_with(sv, SV("	"))) {
+            ctx.in_code_block = true;
+        } else if (ctx.in_code_block) {
+            ctx.in_code_block = false;
+        }
+
         while (sv.count > 0) {
-            if (sv_starts_with(sv, sh_open)) {
+            if (!ctx.in_code_block && sv_starts_with(sv, sh_open)) {
                 sv_chop_left(&sv, sh_open.count);
                 size_t index = 0;
                 if (!index_of_delim(sv, sh_close, &index)) {
@@ -113,12 +125,10 @@ preprocess(FILE *src, FILE *dest)
                 fprintf(dest, SV_Fmt, SV_Arg(result));
                 sv_chop_left(&sv, sh_close.count); // Advance past closing delim
             } else {
+                // TODO: We should only escape directives we define.
                 String_View chopped = sv_chop_left(&sv, 1);
+                if (sv_eq(chopped, SV("\\"))) chopped = sv_chop_left(&sv, 1);
                 fprintf(dest, SV_Fmt, SV_Arg(chopped));
-                if (sv_eq(chopped, SV("\\"))) {
-                    chopped = sv_chop_left(&sv, 1);
-                    fprintf(dest, SV_Fmt, SV_Arg(chopped));
-                }
             }
         }
 
