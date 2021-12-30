@@ -91,7 +91,7 @@ index_of_delim(String_View sv, String_View delim, size_t *index)
 }
 
 void
-preprocess(FILE *src, FILE *dst)
+preprocess(FILE *src, FILE *dest)
 {
     String_View in;
     String_View sh_open = sv_from_cstr("$(");
@@ -110,27 +110,61 @@ preprocess(FILE *src, FILE *dst)
                 }
                 String_View cmd = unescape(sv_chop_left(&sv, index));
                 String_View result = execute(cmd);
-                fprintf(dst, SV_Fmt, SV_Arg(result));
+                fprintf(dest, SV_Fmt, SV_Arg(result));
                 sv_chop_left(&sv, sh_close.count); // Advance past closing delim
             } else {
                 String_View chopped = sv_chop_left(&sv, 1);
-                fprintf(dst, SV_Fmt, SV_Arg(chopped));
+                fprintf(dest, SV_Fmt, SV_Arg(chopped));
                 if (sv_eq(chopped, SV("\\"))) {
                     chopped = sv_chop_left(&sv, 1);
-                    fprintf(dst, SV_Fmt, SV_Arg(chopped));
+                    fprintf(dest, SV_Fmt, SV_Arg(chopped));
                 }
             }
         }
 
-        fputc('\n', dst);
+        fputc('\n', dest);
         free((char*)in.data);
     }
 }
 
+void
+usage(const char *progname)
+{
+    fprintf(stderr, "USAGE: %s [src [dest]]\n", progname);
+    exit(1);
+}
+
 // Pre-process markdown input from stdin
 int
-main(void)
+main(int argc, const char *argv[])
 {
-    preprocess(stdin, stdout);
+    FILE *src = stdin;
+    FILE *dest = stdout;
+
+    if (argc > 3) usage(argv[0]);
+
+    if (argc > 1) {
+        if (strncmp(argv[1], "-h", 2) == 0) usage(argv[0]);
+
+        src = fopen(argv[1], "r");
+        if (src == NULL) {
+            fprintf(stderr, "ERROR: Unable to open src file `%s`: %s\n",
+                    argv[1], strerror(errno));
+            exit(1);
+        }
+    }
+
+    if (argc > 2) {
+        if (strncmp(argv[2], "-h", 2) == 0) usage(argv[0]);
+
+        dest = fopen(argv[2], "w");
+        if (dest == NULL) {
+            fprintf(stderr, "ERROR: Unabel to open dest file `%s`: %s\n",
+                    argv[2], strerror(errno));
+            exit(1);
+        }
+    }
+
+    preprocess(src, dest);
 }
 
