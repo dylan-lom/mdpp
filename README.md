@@ -10,8 +10,8 @@ commands at "compile time" in my
 
 The syntax is inspired by the
 [command substitution](https://www.gnu.org/software/bash/manual/html_node/Command-Substitution.html)
-syntax found in POSIX-esque shell implementations (since \`...\` is already
-found in markdown for code we use the `$(...)` syntax).
+syntax found in POSIX-esque shell implementations (since <code>\`...\`</code>
+is already found in markdown for code we use the `$(...)` syntax).
 
 Additionally I wanted to be able to define a document "header" containing
 information to be include in the HTML `<head>`, and also defining functions /
@@ -25,14 +25,15 @@ LaTex expressions.
 
 ## Goals/TODO
 
-[x] Command substitution
-[x] Simple compilation (no makefiles, autotools)
-[ ] Shell persistance across substitutions
-[ ] Header section
-[ ] Simple I/O testing
-[ ] Auto invoke markdown command
-[ ] Custom directives
-[ ] Custom shells
+- [x] Command substitution
+- [x] Simple compilation (no autotools)
+- [ ] Contextual awarness of Markdown (no substitutions in code blocks)
+- [ ] Shell persistance across substitutions
+- [ ] Header section
+- [ ] Simple I/O testing
+- [ ] Auto invoke markdown command
+- [ ] Custom directives
+- [ ] Custom shells
 
 ## References
 
