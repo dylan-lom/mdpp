@@ -31,7 +31,7 @@ LaTex expressions.
 - [ ] Shell persistance across substitutions
 - [ ] Header section
 - [ ] Simple I/O testing
-- [ ] Auto invoke markdown command
+- [x] Auto invoke markdown command
 - [ ] Custom directives
 - [ ] Custom shells
 
