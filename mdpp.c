@@ -18,6 +18,8 @@ enum {
 typedef struct {
     FILE *src;
     FILE *dest;
+    FILE *shell_write;
+    FILE *shell_read;
     bool dest_is_pipe;
     bool in_code_block;
 } Context;
@@ -47,6 +49,17 @@ next_line(String_View *sv, FILE *stream)
 
     *sv = sv_trim_right(sv_from_parts(lineptr, read));
     return true;
+}
+
+String_View
+shell_exec(String_View command, Context *ctx)
+{
+    fprintf(ctx->shell_write, SV_Fmt ";\n", SV_Arg(command));
+    fflush(ctx->shell_write);
+    // TODO: Handle multi-line shell return?
+    String_View result;
+    next_line(&result, ctx->shell_read);
+    return result;
 }
 
 String_View
@@ -137,7 +150,8 @@ preprocess(Context *ctx)
                     die("ERROR: Shell substring was not closed!\n");
                 }
                 String_View cmd = unescape(sv_chop_left(&sv, index));
-                String_View result = execute(cmd);
+                fflush(ctx->dest);
+                String_View result = shell_exec(cmd, ctx);
                 fprintf(dest, SV_Fmt, SV_Arg(result));
                 sv_chop_left(&sv, sh_close.count); // Advance past closing delim
             } else {
@@ -159,6 +173,11 @@ usage(const char *progname)
     die("USAGE: %s [-e] [src [dest]]\n", progname);
 }
 
+/* Spawn a child process running command.
+ * > command - path of command to be executed
+ * > dest    - file to redirect process' stdout to
+ * > return  - write end of process' stdin (pipe)
+ */
 FILE *
 cmd_open(String_View command, FILE *dest)
 {
@@ -191,7 +210,7 @@ cmd_open(String_View command, FILE *dest)
         close(fds[PIPE_READ]); // Close unused read end in parent
         FILE *pp = fdopen(fds[PIPE_WRITE], "w");
         if (pp == NULL) {
-            die("ERROR: Unable to create FILE* for command pipe: %s\n",
+            die("ERROR: Unable to create output FILE for command pipe: %s\n",
                 strerror(errno));
         }
         return pp;
@@ -228,6 +247,54 @@ init(int argc, const char *argv[])
     ctx.src = stdin;
     ctx.dest = stdout;
 
+    // Create shell subprocess
+    {
+        int shfd[4];
+        if (pipe(shfd) < 0 || pipe(shfd+2) < 0) {
+            die("ERROR: Unable to create pipes for shell: %s\n",
+                strerror(errno));
+        }
+
+        pid_t p = fork();
+        if (p < 0) die("ERROR: Unable to fork: %s\n", strerror(errno));
+        if (p == 0) {
+            if (dup2(shfd[PIPE_READ], fileno(stdin)) < 0) {
+                die("ERROR: Unable to set stdin in child: %s\n",
+                    strerror(errno));
+            }
+
+            if (dup2(shfd[2+PIPE_WRITE], fileno(stdout)) < 0) {
+                die("ERROR: Unable to set stdout in child: %s\n",
+                    strerror(errno));
+            }
+
+            if (close(shfd[PIPE_READ]) < 0
+                    || close(shfd[PIPE_WRITE]) < 0
+                    || close(shfd[2+PIPE_READ]) < 0
+                    || close(shfd[2+PIPE_WRITE]) < 0) {
+                die("ERROR: Unable to close pipe fd's: %s\n", strerror(errno));
+
+            }
+
+            if (execl("/bin/sh", "/bin/sh", (char*)NULL) < 0) {
+                die("ERROR: Unable to execute shell: %s\n", strerror(errno));
+            }
+
+            assert(false && "UNREACHABLE");
+        } else {
+            if (close(shfd[PIPE_READ]) < 0 || close(shfd[2+PIPE_WRITE])) {
+                die("ERROR: Unable to close pipe fd's: %s\n", strerror(errno));
+            }
+
+            ctx.shell_write = fdopen(shfd[PIPE_WRITE], "w");
+            ctx.shell_read = fdopen(shfd[2+PIPE_READ], "r");
+            if (ctx.shell_write == NULL || ctx.shell_read == NULL) {
+                die("ERROR: Unable to open FILEs from pipes to shell: %s\n",
+                    strerror(errno));
+            }
+        }
+    }
+
     // Flags
     bool flag_e = false;
     int i;
@@ -252,6 +319,7 @@ init(int argc, const char *argv[])
                 strerror(errno));
         }
     }
+
     if (argc > 1) {
         ctx.dest = fopen(argv[1], "w");
         if (ctx.dest == NULL) {
@@ -259,6 +327,7 @@ init(int argc, const char *argv[])
                 strerror(errno));
         }
     }
+
     if (flag_e) {
         // TODO: Take markdown command from args
         ctx.dest = cmd_open(SV("markdown"), ctx.dest);
@@ -282,6 +351,16 @@ cleanup(Context *ctx)
         fclose(ctx->dest);
     }
     ctx->dest = NULL;
+
+    if (pclose(ctx->shell_write) < 0) {
+        die("ERROR: Unable to close shell_write pipe: %s\n",
+            strerror(errno));
+    }
+
+    if (pclose(ctx->shell_read) < 0) {
+        die("ERROR: Unable to close shell_read pipe: %s\n",
+            strerror(errno));
+    }
 }
 
 // Pre-process markdown input from stdin
