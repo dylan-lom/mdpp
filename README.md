@@ -23,6 +23,15 @@ direct substitutions / shell commands). An example use case of this would be
 defining a `$$...$$` directive which translates into something that renders
 LaTex expressions.
 
+## Quickstart
+
+```console
+$ cc -o mdpp mdpp.c
+$ cat examples/substitution.md
+$ ./mdpp examples/substitution.md
+```
+
+
 ## Goals/TODO
 
 - [x] Command substitution
@@ -39,5 +48,6 @@ LaTex expressions.
 
 1. [Daring Fireball: Markdown](https://daringfireball.net/projects/markdown/)
 1. [Preprocessor - Wikipedia](https://en.wikipedia.org/wiki/Preprocessor)
+1. [tsoding/sv on GitHub](https://github.com/tsoding/sv)
 1. [dylan-lom/shmd on GitHub](https://github.com/dylan-lom/shmd)
 
