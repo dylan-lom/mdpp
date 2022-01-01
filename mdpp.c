@@ -173,69 +173,6 @@ usage(const char *progname)
     die("USAGE: %s [-e] [src [dest]]\n", progname);
 }
 
-/* Spawn a child process running command.
- * > command - path of command to be executed
- * > dest    - file to redirect process' stdout to
- * > return  - write end of process' stdin (pipe)
- */
-FILE *
-cmd_open(String_View command, FILE *dest)
-{
-    assert(dest != NULL);
-
-    char *cmd = calloc(command.count + 1, sizeof(*cmd));
-    if (cmd == NULL) {
-        die("ERROR: Unable to allocate memory for command `" SV_Fmt "`: %s\n",
-            SV_Arg(command), strerror(errno));
-    }
-    strncpy(cmd, command.data, command.count + 1);
-
-    int fds[2], child_in, child_out;
-    if (pipe(fds) < 0) {
-        die("ERROR: Unable to create pipe for command `%s`: %s\n", cmd,
-            strerror(errno));
-    }
-
-    child_in = fds[PIPE_READ];
-    child_out = fileno(dest);
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        die("ERROR: Unable to create child process for command `%s`: %s\n",
-            cmd, strerror(errno));
-    }
-
-    // In parent -- return write end of pipe.
-    if (pid > 0) {
-        close(fds[PIPE_READ]); // Close unused read end in parent
-        FILE *pp = fdopen(fds[PIPE_WRITE], "w");
-        if (pp == NULL) {
-            die("ERROR: Unable to create output FILE for command pipe: %s\n",
-                strerror(errno));
-        }
-        return pp;
-    }
-
-    // In child -- setup stdin / stdout and become command
-    if (dup2(child_in, STDIN_FILENO) < 0 || dup2(child_out, STDOUT_FILENO) < 0) {
-        // TODO: The parent will not die if the child fails to start...
-        die("ERROR: Unable to set stdin/stdout in child process: %s\n",
-            strerror(errno));
-    };
-
-    // Close extra fd's (making sure we don't accidentally close stdin/stdout)
-    close(fds[PIPE_WRITE]);
-    if (child_in != STDIN_FILENO) close(child_in);
-    if (child_out != STDOUT_FILENO) close(child_out);
-
-    char *args[] = { cmd, NULL };
-    if (execvp(args[0], args) < 0) {
-        die("ERROR: Unable to exec command `%s`: %s\n", cmd, strerror(errno));
-    }
-
-    assert(false && "UNREACHABLE");
-}
-
 Context
 init(int argc, const char *argv[])
 {
@@ -329,8 +266,52 @@ init(int argc, const char *argv[])
     }
 
     if (flag_e) {
-        // TODO: Take markdown command from args
-        ctx.dest = cmd_open(SV("markdown"), ctx.dest);
+        assert(ctx.dest != NULL);
+        int mdfd[2];
+        if (pipe(mdfd) < 0) {
+            die("ERROR: Unable to create pipes: %s\n", strerror(errno));
+        }
+
+        pid_t p = fork();
+        if (p < 0) die("ERROR: Unable to fork: %s\n", strerror(errno));
+
+        if (p == 0) {
+            if (dup2(mdfd[PIPE_READ], fileno(stdin)) < 0) {
+                die("ERROR: Unable to set stdin of child: %s\n",
+                    strerror(errno));
+            }
+            if (close(mdfd[PIPE_READ]) < 0 || close(mdfd[PIPE_WRITE]) < 0) {
+                die("ERROR: Unable to close pipe fd's: %s\n", strerror(errno));
+            }
+
+            if (fileno(ctx.dest) != fileno(stdout)) {
+                if (dup2(fileno(ctx.dest), fileno(stdout)) < 0) {
+                    die("ERROR: Unable to set stdout of child: %s\n",
+                        strerror(errno));
+                }
+                if (close(fileno(ctx.dest)) < 0) {
+                    die("ERROR: Unable to close dest fd after dup2: %s\n",
+                        strerror(errno));
+                }
+            }
+            // TODO: Take markdown command from args
+            char *args[] = { "markdown", NULL };
+            if (execvp(args[0], args) < 0) {
+                die("ERROR: Unable to exec' markdown command: `%s`: %s\n",
+                    args[0], strerror(errno));
+            }
+            assert(false && "UNREACHABLE");
+        }
+
+        // Parent
+        if (close(mdfd[PIPE_READ]) < 0) {
+            die("ERROR: Unable to close pipe: %s\n", strerror(errno));
+        }
+        ctx.dest = fdopen(mdfd[PIPE_WRITE], "w");
+        if (ctx.dest == NULL) {
+            die("ERROR: Unable to open FILE to subprocess: %s\n",
+                strerror(errno));
+        }
         ctx.dest_is_pipe = true;
     }
 
