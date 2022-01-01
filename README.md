@@ -31,7 +31,6 @@ $ cat examples/substitution.md
 $ ./mdpp examples/substitution.md
 ```
 
-
 ## Goals/TODO
 
 - [x] Command substitution
@@ -39,7 +38,7 @@ $ ./mdpp examples/substitution.md
 - [x] Contextual awarness of Markdown (no substitutions in code blocks)
 - [x] Shell persistance across substitutions
 - [ ] Header section
-- [ ] Simple I/O testing
+- [x] Some degree of testing
 - [x] Auto invoke markdown command
 - [ ] Custom directives
 - [ ] Custom shells

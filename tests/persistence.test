@@ -1,0 +1,16 @@
+=========================
+This value: $(x=`expr 1 + 2`; echo $x)
+
+Should persist: $(echo $x)
+
+New value: $(x=`expr $x + $x`; echo $x)
+
+Should persist: $(echo $x)
+=========================
+This value: 3
+
+Should persist: 3
+
+New value: 6
+
+Should persist: 6
