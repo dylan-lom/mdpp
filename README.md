@@ -28,7 +28,7 @@ LaTex expressions.
 - [x] Command substitution
 - [x] Simple compilation (no autotools)
 - [x] Contextual awarness of Markdown (no substitutions in code blocks)
-- [ ] Shell persistance across substitutions
+- [x] Shell persistance across substitutions
 - [ ] Header section
 - [ ] Simple I/O testing
 - [x] Auto invoke markdown command
