@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <stdbool.h>
 
+#include <sys/wait.h>
+
 #define SV_IMPLEMENTATION
 #include "sv.h"
 
@@ -365,6 +367,9 @@ cleanup(Context *ctx)
         die("ERROR: Unable to close shell_read pipe: %s\n",
             strerror(errno));
     }
+
+    // Wait for all children to finish
+    while (wait(NULL) != -1) {}
 }
 
 // Pre-process markdown input from stdin

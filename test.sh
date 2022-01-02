@@ -36,14 +36,6 @@ for f in tests/*.test; do
 
     echo "$output" > "$dest/$casename.expected"
     echo "$input" | ./mdpp $args > "$dest/$casename.actual"
-    # This sleep seems to keep some eldritch shell demons at bay?
-    # For some reason we were hitting the if statement before we had finished
-    # writing the actual output... as such we entered the if branch but the
-    # diff produced no output because by the time we reached it the write was
-    # finished... ???
-    # This was particularly happening with the -e test case so possibly a bug
-    # where we aren't waiting for the markdown subprocess to finish in mdpp?
-    sleep 0
 
     if ! (diff -q \
             --label "$casename.expected" "$dest/$casename.expected" \
