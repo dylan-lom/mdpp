@@ -106,32 +106,60 @@ bool
 index_of_delim(String_View sv, String_View delim, size_t *index)
 {
     // Could not find
-    if (!sv_find(sv, delim, index)) return false;
+    size_t n = 0;
+    if (!sv_find(sv, delim, &n)) return false;
 
     // Found an escaped occurence
-    if (*index > 0 && *(sv.data + *index - 1) == '\\') {
-        *index += delim.count;
-        sv_chop_left(&sv, *index);
+    if (n > 0 && *(sv.data + n - 1) == '\\') {
+        n += delim.count;
+        sv_chop_left(&sv, n);
 
         size_t nindex = 0;
         if (!index_of_delim(sv, delim, &nindex)) return false;
 
-        *index += nindex;
+        if (index) *index = n + nindex;
         return true;
     }
 
+    if (index) *index = n;
     return true;
+}
+
+// TODO: Create a table of delimiters
+String_View sh_open = SV_STATIC("$(");
+String_View sh_close = SV_STATIC(")");
+
+String_View
+parse_substitution(String_View *sv)
+{
+    size_t index = 0;
+    if (!index_of_delim(*sv, sh_close, &index)) {
+        die("ERROR: Shell substring was not closed!\n");
+    }
+
+    String_View cmd = sv_chop_left(sv, index);
+    String_View slice = cmd;
+    // Nested substitutions found
+    while (index_of_delim(slice, sh_open, &index)) {
+        // Find something to close it
+        if (!index_of_delim(*sv, sh_close, &index)) {
+            die("ERROR: Shell substring was not closed!\n");
+        }
+        // Extend cmd to enclose closing delim
+        slice = sv_chop_left(sv, index + sh_close.count);
+        cmd.count += slice.count;
+    }
+
+    return unescape(sv_trim_right(cmd));
 }
 
 void
 preprocess(Context *ctx)
 {
     String_View in;
-    String_View sh_open = sv_from_cstr("$(");
-    String_View sh_close = sv_from_cstr(")");
 
-    FILE *src = ctx->src,
-         *dest = ctx->dest;
+    FILE *src = ctx->src;
+    FILE *dest = ctx->dest;
 
     while (next_line(&in, src)) {
         String_View sv = in;
@@ -145,12 +173,7 @@ preprocess(Context *ctx)
         while (sv.count > 0) {
             if (!ctx->in_code_block && sv_starts_with(sv, sh_open)) {
                 sv_chop_left(&sv, sh_open.count);
-                size_t index = 0;
-                if (!index_of_delim(sv, sh_close, &index)) {
-                    die("ERROR: Shell substring was not closed!\n");
-                }
-                String_View cmd = unescape(sv_chop_left(&sv, index));
-                fflush(ctx->dest);
+                String_View cmd = parse_substitution(&sv);
                 String_View result = shell_exec(cmd, ctx);
                 fprintf(dest, SV_Fmt, SV_Arg(result));
                 sv_chop_left(&sv, sh_close.count); // Advance past closing delim
