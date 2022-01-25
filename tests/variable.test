@@ -1,0 +1,11 @@
+=========================
+% title "foo.md"
+
+# $(echo $title)
+
+Hello world!
+=========================
+
+# foo.md
+
+Hello world!

@@ -53,15 +53,17 @@ next_line(String_View *sv, FILE *stream)
     return true;
 }
 
-String_View
-shell_exec(String_View command, Context *ctx)
+void
+shell_exec(String_View command, Context *ctx, String_View *result)
 {
     fprintf(ctx->shell_write, SV_Fmt ";\n", SV_Arg(command));
     fflush(ctx->shell_write);
     // TODO: Handle multi-line shell return?
-    String_View result;
-    next_line(&result, ctx->shell_read);
-    return result;
+    if (result) {
+        next_line(result, ctx->shell_read);
+    } else {
+        fflush(ctx->shell_read);
+    }
 }
 
 String_View
@@ -130,6 +132,7 @@ index_of_delim(String_View sv, String_View delim, size_t *index)
 // TODO: Create a table of delimiters
 String_View sh_open = SV_STATIC("$(");
 String_View sh_close = SV_STATIC(")");
+String_View var_def = SV_STATIC("%");
 
 String_View
 parse_substitution(String_View *sv)
@@ -172,11 +175,25 @@ preprocess(Context *ctx)
             ctx->in_code_block = false;
         }
 
+        if (sv_starts_with(sv, var_def)) {
+            sv_chop_left(&sv, var_def.count);
+            String_View cmd = sv_trim_left(sv);
+            size_t index;
+            if (!sv_index_of(cmd, ' ', &index)) {
+                fprintf(stderr, "ERROR: Expected ' ' in variable definition but didn't get one\n");
+                exit(1);
+            }
+            ((char*)cmd.data)[index] = '=';
+            shell_exec(cmd, ctx, NULL);
+            continue;
+        }
+
         while (sv.count > 0) {
             if (!ctx->in_code_block && sv_starts_with(sv, sh_open)) {
                 sv_chop_left(&sv, sh_open.count);
                 String_View cmd = parse_substitution(&sv);
-                String_View result = shell_exec(cmd, ctx);
+                String_View result;
+                shell_exec(cmd, ctx, &result);
                 fprintf(dest, SV_Fmt, SV_Arg(result));
                 sv_chop_left(&sv, sh_close.count); // Advance past closing delim
             } else {

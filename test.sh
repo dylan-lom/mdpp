@@ -12,10 +12,11 @@ run_test() {
     casename="$(echo "$file" | rev | cut -d '.' -f2- | cut -d '/' -f1 | rev)"
     printf "%-35s" "Running test case \`$casename\`..."
 
-    args_end="$(grep -n "$delim" "$file" | head -n 1 | cut -d ':' -f1)"
-    input_end="$(grep -n "$delim" "$file" | tail -n 1 | cut -d ':' -f1)"
+    args_end="$(grep -n "^$delim\$" "$file" | head -n 1 | cut -d ':' -f1)"
+    input_end="$(grep -n "^$delim\$" "$file" | tail -n 1 | cut -d ':' -f1)"
 
-    if [ $(grep "$delim" "$file" | wc -l) -lt 2 ]; then
+    if [ $(grep "^$delim\$" "$file" | wc -l) -lt 2 ]; then
+        printf "    [FAIL]\n"
         echo "ERROR: Invalid test file '$file': missing delimiter" > /dev/stderr
         echo "INFO:    Test files require two delimiters, indicating end of args and input sections" > /dev/stderr
         echo "INFO:    Delimiter is: '$delim'" > /dev/stderr
