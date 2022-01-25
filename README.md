@@ -26,9 +26,10 @@ LaTex expressions.
 ## Quickstart
 
 ```console
-$ cc -o mdpp mdpp.c
+$ cc -o mdpp mdpp.c                # compile the program
 $ cat examples/substitution.md
-$ ./mdpp examples/substitution.md
+$ ./mdpp examples/substitution.md  # run simple example
+$ ./test.sh tests/*.test           # run test cases
 ```
 
 ## Goals/TODO
