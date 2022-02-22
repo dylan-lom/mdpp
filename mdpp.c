@@ -146,6 +146,10 @@ Directive head = {
     .open = SV_STATIC("%"),
 };
 
+Directive title = {
+    .open = SV_STATIC("%title "),
+};
+
 String_View
 parse_substitution(String_View *sv)
 {
@@ -191,6 +195,13 @@ preprocess(Context *ctx)
             ctx->header_is_open = !ctx->header_is_open;
             fprintf(dest, ctx->header_is_open ? "<head>" : "</head>");
             sv.count = 0; // Ignore trailing whitespace
+        }
+
+        if (sv_starts_with(sv, title.open)) {
+            sv_chop_left(&sv, title.open.count);
+            fprintf(dest, "<title>" SV_Fmt "</title>", SV_Arg(sv));
+            // TODO: Set $title variable in shell
+            sv.count = 0; // Done parsing this line
         }
 
         while (sv.count > 0) {
