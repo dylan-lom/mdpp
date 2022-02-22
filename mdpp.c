@@ -24,6 +24,8 @@ typedef struct {
     FILE *shell_read;
     bool dest_is_pipe;
     bool in_code_block;
+
+    bool header_is_open;
 } Context;
 
 void
@@ -140,7 +142,7 @@ Directive shell = {
     .close = SV_STATIC(")"),
 };
 
-Directive variable = {
+Directive head = {
     .open = SV_STATIC("%"),
 };
 
@@ -185,17 +187,10 @@ preprocess(Context *ctx)
             ctx->in_code_block = false;
         }
 
-        if (sv_starts_with(sv, variable.open)) {
-            sv_chop_left(&sv, variable.open.count);
-            String_View cmd = sv_trim_left(sv);
-            size_t index;
-            if (!sv_index_of(cmd, ' ', &index)) {
-                fprintf(stderr, "ERROR: Expected ' ' in variable definition but didn't get one\n");
-                exit(1);
-            }
-            ((char*)cmd.data)[index] = '=';
-            shell_exec(cmd, ctx, NULL);
-            continue;
+        if (sv_eq(sv_trim_right(sv), head.open)) {
+            ctx->header_is_open = !ctx->header_is_open;
+            fprintf(dest, ctx->header_is_open ? "<head>" : "</head>");
+            sv.count = 0; // Ignore trailing whitespace
         }
 
         while (sv.count > 0) {
