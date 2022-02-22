@@ -200,7 +200,23 @@ preprocess(Context *ctx)
         if (sv_starts_with(sv, title.open)) {
             sv_chop_left(&sv, title.open.count);
             fprintf(dest, "<title>" SV_Fmt "</title>", SV_Arg(sv));
-            // TODO: Set $title variable in shell
+            // Set $title in shell
+            {
+                // "title='<val>'"
+                int buflen = sizeof("title='") + sv.count + 1;
+                char *buf = calloc(buflen, sizeof(*buf));
+                if (!buf) {
+                    die("ERROR: Unable to create temporary buffer: %s\n",
+                        strerror(errno));
+                }
+                int wrote = snprintf(buf, buflen, "title='" SV_Fmt "'", SV_Arg(sv));
+                assert(wrote + 1 == buflen
+                       && "snprintf did not fill title buffer.");
+                String_View cmd = sv_from_parts(buf, buflen);
+                shell_exec(cmd, ctx, NULL);
+                free(buf);
+            }
+
             sv.count = 0; // Done parsing this line
         }
 

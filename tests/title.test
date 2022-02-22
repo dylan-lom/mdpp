@@ -1,4 +1,12 @@
 =========================
+%
 %title Hello world!
+%
+
+# $(echo "$title")
 =========================
+<head>
 <title>Hello world!</title>
+</head>
+
+# Hello world!
