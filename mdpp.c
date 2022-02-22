@@ -129,29 +129,39 @@ index_of_delim(String_View sv, String_View delim, size_t *index)
     return true;
 }
 
+typedef struct {
+    String_View open;
+    String_View close;
+} Directive;
+
 // TODO: Create a table of delimiters
-String_View sh_open = SV_STATIC("$(");
-String_View sh_close = SV_STATIC(")");
-String_View var_def = SV_STATIC("%");
+Directive shell = {
+    .open = SV_STATIC("$("),
+    .close = SV_STATIC(")"),
+};
+
+Directive variable = {
+    .open = SV_STATIC("%"),
+};
 
 String_View
 parse_substitution(String_View *sv)
 {
     size_t index = 0;
-    if (!index_of_delim(*sv, sh_close, &index)) {
+    if (!index_of_delim(*sv, shell.close, &index)) {
         die("ERROR: Shell substring was not closed!\n");
     }
 
     String_View cmd = sv_chop_left(sv, index);
     String_View slice = cmd;
     // Nested substitutions found
-    while (index_of_delim(slice, sh_open, &index)) {
+    while (index_of_delim(slice, shell.open, &index)) {
         // Find something to close it
-        if (!index_of_delim(*sv, sh_close, &index)) {
+        if (!index_of_delim(*sv, shell.close, &index)) {
             die("ERROR: Shell substring was not closed!\n");
         }
         // Extend cmd to enclose closing delim
-        slice = sv_chop_left(sv, index + sh_close.count);
+        slice = sv_chop_left(sv, index + shell.close.count);
         cmd.count += slice.count;
     }
 
@@ -175,8 +185,8 @@ preprocess(Context *ctx)
             ctx->in_code_block = false;
         }
 
-        if (sv_starts_with(sv, var_def)) {
-            sv_chop_left(&sv, var_def.count);
+        if (sv_starts_with(sv, variable.open)) {
+            sv_chop_left(&sv, variable.open.count);
             String_View cmd = sv_trim_left(sv);
             size_t index;
             if (!sv_index_of(cmd, ' ', &index)) {
@@ -189,13 +199,13 @@ preprocess(Context *ctx)
         }
 
         while (sv.count > 0) {
-            if (!ctx->in_code_block && sv_starts_with(sv, sh_open)) {
-                sv_chop_left(&sv, sh_open.count);
+            if (!ctx->in_code_block && sv_starts_with(sv, shell.open)) {
+                sv_chop_left(&sv, shell.open.count);
                 String_View cmd = parse_substitution(&sv);
                 String_View result;
                 shell_exec(cmd, ctx, &result);
                 fprintf(dest, SV_Fmt, SV_Arg(result));
-                sv_chop_left(&sv, sh_close.count); // Advance past closing delim
+                sv_chop_left(&sv, shell.close.count); // Advance past closing delim
             } else {
                 // TODO: We should only escape directives we define.
                 String_View chopped = sv_chop_left(&sv, 1);
