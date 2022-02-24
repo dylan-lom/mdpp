@@ -187,6 +187,45 @@ parse_substitution(String_View *sv)
 }
 
 void
+preprocess_shell(Context *ctx, String_View sv)
+{
+    String_View result;
+    shell_exec(ctx, sv, &result);
+    fprintf(ctx->dest, SV_Fmt, SV_Arg(result));
+}
+
+void
+preprocess_head(Context *ctx, String_View sv)
+{
+    ctx->header_is_open = !ctx->header_is_open;
+    fprintf(ctx->dest, ctx->header_is_open ? "<head>" : "</head>");
+    (void)sv;
+}
+
+void
+preprocess_title(Context *ctx, String_View sv)
+{
+    fprintf(ctx->dest, "<title>" SV_Fmt "</title>", SV_Arg(sv));
+    // Set $title in shell
+    shell_set(ctx, SV("title"), sv);
+}
+
+void
+preprocess_meta(Context *ctx, String_View sv)
+{
+    // TODO: Support spaces
+    size_t n;
+    sv_index_of(sv, ' ', &n);
+    if (!n) die("ERROR: %meta directive requires two arguments\n");
+    String_View name = sv_chop_left(&sv, n);
+    String_View val = sv_trim(sv);
+
+    fprintf(ctx->dest, "<meta name=\"" SV_Fmt "\" content=\"" SV_Fmt "\">",
+            SV_Arg(name), SV_Arg(val));
+    shell_set(ctx, name, val);
+}
+
+void
 preprocess(Context *ctx)
 {
     String_View in;
@@ -204,30 +243,17 @@ preprocess(Context *ctx)
         }
 
         if (sv_eq(sv_trim_right(sv), head.open)) {
-            ctx->header_is_open = !ctx->header_is_open;
-            fprintf(dest, ctx->header_is_open ? "<head>" : "</head>");
+            preprocess_head(ctx, sv);
             sv.count = 0; // Ignore trailing whitespace
         }
 
         if (sv_starts_with(sv, title.open)) {
             sv_chop_left(&sv, title.open.count);
-            fprintf(dest, "<title>" SV_Fmt "</title>", SV_Arg(sv));
-            // Set $title in shell
-            shell_set(ctx, SV("title"), sv);
+            preprocess_title(ctx, sv);
             sv.count = 0; // Done parsing this line
         } else if (sv_starts_with(sv, meta.open)) {
             sv_chop_left(&sv, meta.open.count);
-            // TODO: Support spaces
-            size_t n;
-            sv_index_of(sv, ' ', &n);
-            if (!n) die("ERROR: %meta directive requires two arguments\n");
-            String_View name = sv_chop_left(&sv, n);
-            String_View val = sv_trim(sv);
-
-            fprintf(dest, "<meta name=\"" SV_Fmt "\" content=\"" SV_Fmt "\">",
-                    SV_Arg(name), SV_Arg(val));
-            shell_set(ctx, name, val);
-
+            preprocess_meta(ctx, sv);
             sv.count = 0;
         }
 
@@ -235,10 +261,7 @@ preprocess(Context *ctx)
         while (sv.count > 0) {
             if (!ctx->in_code_block && sv_starts_with(sv, shell.open)) {
                 sv_chop_left(&sv, shell.open.count);
-                String_View cmd = parse_substitution(&sv);
-                String_View result;
-                shell_exec(ctx, cmd, &result);
-                fprintf(dest, SV_Fmt, SV_Arg(result));
+                preprocess_shell(ctx, parse_substitution(&sv));
                 sv_chop_left(&sv, shell.close.count); // Advance past closing delim
             } else {
                 // TODO: We should only escape directives we define.
