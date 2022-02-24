@@ -1,12 +1,16 @@
 =========================
 %
 %meta author Dylan Lom
+%meta published 2022-02-24
 %
 
 Author: $(echo $author)
+Published: $(echo $published)
 =========================
 <head>
 <meta name="author" content="Dylan Lom">
+<meta name="published" content="2022-02-24">
 </head>
 
 Author: Dylan Lom
+Published: 2022-02-24
