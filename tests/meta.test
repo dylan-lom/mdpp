@@ -1,0 +1,12 @@
+=========================
+%
+%meta author Dylan Lom
+%
+
+Author: $(echo $author)
+=========================
+<head>
+<meta name="author" content="Dylan Lom">
+</head>
+
+Author: Dylan Lom

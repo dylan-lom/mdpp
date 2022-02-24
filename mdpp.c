@@ -56,7 +56,7 @@ next_line(String_View *sv, FILE *stream)
 }
 
 void
-shell_exec(String_View command, Context *ctx, String_View *result)
+shell_exec(Context *ctx, String_View command, String_View *result)
 {
     fprintf(ctx->shell_write, SV_Fmt ";\n", SV_Arg(command));
     fflush(ctx->shell_write);
@@ -66,6 +66,14 @@ shell_exec(String_View command, Context *ctx, String_View *result)
     } else {
         fflush(ctx->shell_read);
     }
+}
+
+void
+shell_set(Context *ctx, String_View name, String_View val)
+{
+    fprintf(ctx->shell_write, SV_Fmt "='" SV_Fmt "';\n", SV_Arg(name),
+            SV_Arg(val));
+    fflush(ctx->shell_write);
 }
 
 String_View
@@ -150,6 +158,10 @@ Directive title = {
     .open = SV_STATIC("%title "),
 };
 
+Directive meta = {
+    .open = SV_STATIC("%meta "),
+};
+
 String_View
 parse_substitution(String_View *sv)
 {
@@ -201,31 +213,31 @@ preprocess(Context *ctx)
             sv_chop_left(&sv, title.open.count);
             fprintf(dest, "<title>" SV_Fmt "</title>", SV_Arg(sv));
             // Set $title in shell
-            {
-                // "title='<val>'"
-                int buflen = sizeof("title='") + sv.count + 1;
-                char *buf = calloc(buflen, sizeof(*buf));
-                if (!buf) {
-                    die("ERROR: Unable to create temporary buffer: %s\n",
-                        strerror(errno));
-                }
-                int wrote = snprintf(buf, buflen, "title='" SV_Fmt "'", SV_Arg(sv));
-                assert(wrote + 1 == buflen
-                       && "snprintf did not fill title buffer.");
-                String_View cmd = sv_from_parts(buf, buflen);
-                shell_exec(cmd, ctx, NULL);
-                free(buf);
-            }
-
+            shell_set(ctx, SV("title"), sv);
             sv.count = 0; // Done parsing this line
+        } else if (sv_starts_with(sv, meta.open)) {
+            sv_chop_left(&sv, meta.open.count);
+            // TODO: Support spaces
+            size_t n;
+            sv_index_of(sv, ' ', &n);
+            if (!n) die("ERROR: %meta directive requires two arguments\n");
+            String_View name = sv_chop_left(&sv, n);
+            String_View val = sv_trim(sv);
+
+            fprintf(dest, "<meta name=\"" SV_Fmt "\" content=\"" SV_Fmt "\">",
+                    SV_Arg(name), SV_Arg(val));
+            shell_set(ctx, name, val);
+
+            sv.count = 0;
         }
+
 
         while (sv.count > 0) {
             if (!ctx->in_code_block && sv_starts_with(sv, shell.open)) {
                 sv_chop_left(&sv, shell.open.count);
                 String_View cmd = parse_substitution(&sv);
                 String_View result;
-                shell_exec(cmd, ctx, &result);
+                shell_exec(ctx, cmd, &result);
                 fprintf(dest, SV_Fmt, SV_Arg(result));
                 sv_chop_left(&sv, shell.close.count); // Advance past closing delim
             } else {
