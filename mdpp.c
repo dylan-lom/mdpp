@@ -95,27 +95,6 @@ execute(String_View command)
     return result;
 }
 
-// TODO: Only unescape recognised sequences
-String_View
-unescape(String_View sv)
-{
-    size_t index = 0;
-    if (!sv_index_of(sv, '\\', &index)) return sv;
-
-    char *data = calloc(sv.count, sizeof(*data));
-    size_t count = 0;
-    do {
-        memcpy(data + count, sv.data, index);
-        count += index;
-        data[count++] = sv.data[index + 1];
-        sv_chop_left(&sv, index + 2);
-    } while (sv_index_of(sv, '\\', &index));
-
-    memcpy(data + count, sv.data, sv.count);
-    count += sv.count;
-    return sv_from_parts(data, count);
-}
-
 bool
 index_of_delim(String_View sv, String_View delim, size_t *index)
 {
@@ -249,7 +228,7 @@ get_enclosed(Directive dir, String_View *sv)
         }
     }
 
-    return unescape(sv_trim_right(content));
+    return sv_trim_right(content);
 }
 
 
@@ -307,9 +286,23 @@ preprocess(Context *ctx)
             }
 
             if (!processed) {
-                // TODO: We should only escape directives we define.
                 String_View chopped = sv_chop_left(&sv, 1);
-                if (sv_eq(chopped, SV("\\"))) chopped = sv_chop_left(&sv, 1);
+
+                if (sv_eq(chopped, SV("\\"))) {
+                    // Make sure we only unescape if we recognise a directive
+                    // following the backslash
+                    for (size_t i = 0; i < DIRECTIVES_COUNT; i++) {
+                        Directive dir = directives[i];
+                        if (sv_starts_with(sv, dir.open)) {
+                            chopped = sv_chop_left(&sv, dir.open.count);
+                            break;
+                        } else if (dir.close.count && sv_starts_with(sv, dir.close)) {
+                            chopped = sv_chop_left(&sv, dir.close.count);
+                            break;
+                        }
+                    }
+                }
+
                 fprintf(dest, SV_Fmt, SV_Arg(chopped));
             }
         }

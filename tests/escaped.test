@@ -1,4 +1,6 @@
 =========================
 Shell output with `\$(...\)`
+\**Escaping unhandled sequences ignored\**
 =========================
 Shell output with `$(...)`
+\**Escaping unhandled sequences ignored\**
