@@ -1,0 +1,17 @@
+=========================
+%
+<script type="module" defer src="https://dylan-lom.github.io/webcomponents/DjlTex.js"></script>
+%
+
+<body>
+$$a + b = c$$
+</body>
+=========================
+<!DOCTYPE html>
+<head>
+<script type="module" defer src="https://dylan-lom.github.io/webcomponents/DjlTex.js"></script>
+</head>
+
+<body>
+<djl-tex>a + b = c</djl-tex>
+</body>

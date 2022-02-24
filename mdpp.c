@@ -148,6 +148,12 @@ preprocess_shell(Context *ctx, String_View sv)
 }
 
 void
+preprocess_tex(Context *ctx, String_View sv)
+{
+    fprintf(ctx->dest, "<djl-tex>" SV_Fmt "</djl-tex>", SV_Arg(sv));
+}
+
+void
 preprocess_head(Context *ctx, String_View sv)
 {
     ctx->header_is_open = !ctx->header_is_open;
@@ -185,13 +191,19 @@ typedef struct {
     Directive_Handler handler;
 } Directive;
 
-#define DIRECTIVES_COUNT 4
+#define DIRECTIVES_COUNT 5
 Directive directives[DIRECTIVES_COUNT] = {
     // shell
     {
         .open = SV_STATIC("$("),
         .close = SV_STATIC(")"),
         .handler = preprocess_shell,
+    },
+    // djl-tex
+    {
+        .open = SV_STATIC("$$"),
+        .close = SV_STATIC("$$"),
+        .handler = preprocess_tex,
     },
     // title
     {
