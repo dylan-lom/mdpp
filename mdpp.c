@@ -185,50 +185,59 @@ typedef struct {
     Directive_Handler handler;
 } Directive;
 
-// TODO: Create a table of delimiters
-Directive shell = {
-    .open = SV_STATIC("$("),
-    .close = SV_STATIC(")"),
-    .handler = preprocess_shell,
-};
-
-Directive head = {
-    .open = SV_STATIC("%"),
-    .handler = preprocess_head,
-};
-
-Directive title = {
-    .open = SV_STATIC("%title "),
-    .handler = preprocess_title,
-};
-
-Directive meta = {
-    .open = SV_STATIC("%meta "),
-    .handler = preprocess_meta,
+#define DIRECTIVES_COUNT 4
+Directive directives[DIRECTIVES_COUNT] = {
+    // shell
+    {
+        .open = SV_STATIC("$("),
+        .close = SV_STATIC(")"),
+        .handler = preprocess_shell,
+    },
+    // title
+    {
+        .open = SV_STATIC("%title "),
+        .handler = preprocess_title,
+    },
+    // meta
+    {
+        .open = SV_STATIC("%meta "),
+        .handler = preprocess_meta,
+    },
+    // head
+    {
+        .open = SV_STATIC("%"),
+        .handler = preprocess_head,
+    },
 };
 
 String_View
-parse_substitution(String_View *sv)
+get_enclosed(Directive dir, String_View *sv)
 {
     size_t index = 0;
-    if (!index_of_delim(*sv, shell.close, &index)) {
-        die("ERROR: Shell substring was not closed!\n");
+    if (!index_of_delim(*sv, dir.close, &index)) {
+        die("ERROR: Directive " SV_Fmt "..." SV_Fmt " was not closed!\n",
+            SV_Arg(dir.open), SV_Arg(dir.close));
     }
 
-    String_View cmd = sv_chop_left(sv, index);
-    String_View slice = cmd;
-    // Nested substitutions found
-    while (index_of_delim(slice, shell.open, &index)) {
-        // Find something to close it
-        if (!index_of_delim(*sv, shell.close, &index)) {
-            die("ERROR: Shell substring was not closed!\n");
+    String_View content = sv_chop_left(sv, index);
+
+    if (!sv_eq(dir.open, dir.close)) {
+        String_View slice = content;
+        // Nested directive found
+        // TODO: Do we really want to support nesting?
+        while (index_of_delim(slice, dir.open, &index)) {
+            // Find something to close it
+            if (!index_of_delim(*sv, dir.close, &index)) {
+                die("ERROR: Directive " SV_Fmt "..." SV_Fmt " was not closed!\n",
+                            SV_Arg(dir.open), SV_Arg(dir.close));
+            }
+            // Extend cmd to enclose closing delim
+            slice = sv_chop_left(sv, index + dir.close.count);
+            content.count += slice.count;
         }
-        // Extend cmd to enclose closing delim
-        slice = sv_chop_left(sv, index + shell.close.count);
-        cmd.count += slice.count;
     }
 
-    return unescape(sv_trim_right(cmd));
+    return unescape(sv_trim_right(content));
 }
 
 
@@ -249,28 +258,43 @@ preprocess(Context *ctx)
             ctx->in_code_block = false;
         }
 
-        if (sv_eq(sv_trim_right(sv), head.open)) {
-            head.handler(ctx, sv);
-            sv.count = 0; // Ignore trailing whitespace
+        // Whole-line directives
+        for (size_t i = 0; i < DIRECTIVES_COUNT; i++) {
+            if (directives[i].close.count != 0) continue;
+
+            if (sv_starts_with(sv, directives[i].open)) {
+                sv_chop_left(&sv, directives[i].open.count);
+                directives[i].handler(ctx, sv);
+                sv.count = 0; // Done parsing this line!
+                break;
+            }
         }
 
-        if (sv_starts_with(sv, title.open)) {
-            sv_chop_left(&sv, title.open.count);
-            title.handler(ctx, sv);
-            sv.count = 0; // Done parsing this line
-        } else if (sv_starts_with(sv, meta.open)) {
-            sv_chop_left(&sv, meta.open.count);
-            meta.handler(ctx, sv);
+        // If we're in a code block we can just print the whole line and be done
+        // with it
+        if (ctx->in_code_block) {
+            fprintf(dest, SV_Fmt, SV_Arg(sv));
             sv.count = 0;
         }
 
-
         while (sv.count > 0) {
-            if (!ctx->in_code_block && sv_starts_with(sv, shell.open)) {
-                sv_chop_left(&sv, shell.open.count);
-                shell.handler(ctx, parse_substitution(&sv));
-                sv_chop_left(&sv, shell.close.count); // Advance past closing delim
-            } else {
+            bool processed = false;
+
+            // In-line directives
+            for (size_t i = 0; i < DIRECTIVES_COUNT; i++) {
+                if (directives[i].close.count == 0) continue;
+
+                if (sv_starts_with(sv, directives[i].open)) {
+                    sv_chop_left(&sv, directives[i].open.count);
+                    String_View content = get_enclosed(directives[i], &sv);
+                    directives[i].handler(ctx, content);
+                    sv_chop_left(&sv, directives[i].close.count);
+                    processed = true;
+                    break;
+                }
+            }
+
+            if (!processed) {
                 // TODO: We should only escape directives we define.
                 String_View chopped = sv_chop_left(&sv, 1);
                 if (sv_eq(chopped, SV("\\"))) chopped = sv_chop_left(&sv, 1);
