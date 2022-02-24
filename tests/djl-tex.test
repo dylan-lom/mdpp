@@ -1,4 +1,6 @@
 =========================
+<!DOCTYPE html>
+<html>
 %
 <script type="module" defer src="https://dylan-lom.github.io/webcomponents/DjlTex.js"></script>
 %
@@ -6,8 +8,10 @@
 <body>
 $$a + b = c$$
 </body>
+</html>
 =========================
 <!DOCTYPE html>
+<html>
 <head>
 <script type="module" defer src="https://dylan-lom.github.io/webcomponents/DjlTex.js"></script>
 </head>
@@ -15,3 +19,4 @@ $$a + b = c$$
 <body>
 <djl-tex>a + b = c</djl-tex>
 </body>
+</html>
