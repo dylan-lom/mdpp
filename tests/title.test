@@ -5,7 +5,6 @@
 
 # $(echo "$title")
 =========================
-<!DOCTYPE html>
 <head>
 <title>Hello world!</title>
 </head>
