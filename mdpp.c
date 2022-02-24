@@ -151,7 +151,7 @@ void
 preprocess_head(Context *ctx, String_View sv)
 {
     ctx->header_is_open = !ctx->header_is_open;
-    fprintf(ctx->dest, ctx->header_is_open ? "<head>" : "</head>");
+    fprintf(ctx->dest, ctx->header_is_open ? "<!DOCTYPE html>\n<head>" : "</head>");
     (void)sv;
 }
 
