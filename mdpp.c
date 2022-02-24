@@ -139,53 +139,6 @@ index_of_delim(String_View sv, String_View delim, size_t *index)
     return true;
 }
 
-typedef struct {
-    String_View open;
-    String_View close;
-} Directive;
-
-// TODO: Create a table of delimiters
-Directive shell = {
-    .open = SV_STATIC("$("),
-    .close = SV_STATIC(")"),
-};
-
-Directive head = {
-    .open = SV_STATIC("%"),
-};
-
-Directive title = {
-    .open = SV_STATIC("%title "),
-};
-
-Directive meta = {
-    .open = SV_STATIC("%meta "),
-};
-
-String_View
-parse_substitution(String_View *sv)
-{
-    size_t index = 0;
-    if (!index_of_delim(*sv, shell.close, &index)) {
-        die("ERROR: Shell substring was not closed!\n");
-    }
-
-    String_View cmd = sv_chop_left(sv, index);
-    String_View slice = cmd;
-    // Nested substitutions found
-    while (index_of_delim(slice, shell.open, &index)) {
-        // Find something to close it
-        if (!index_of_delim(*sv, shell.close, &index)) {
-            die("ERROR: Shell substring was not closed!\n");
-        }
-        // Extend cmd to enclose closing delim
-        slice = sv_chop_left(sv, index + shell.close.count);
-        cmd.count += slice.count;
-    }
-
-    return unescape(sv_trim_right(cmd));
-}
-
 void
 preprocess_shell(Context *ctx, String_View sv)
 {
@@ -225,6 +178,60 @@ preprocess_meta(Context *ctx, String_View sv)
     shell_set(ctx, name, val);
 }
 
+typedef void (*Directive_Handler)(Context *ctx, String_View sv);
+typedef struct {
+    String_View open;
+    String_View close;
+    Directive_Handler handler;
+} Directive;
+
+// TODO: Create a table of delimiters
+Directive shell = {
+    .open = SV_STATIC("$("),
+    .close = SV_STATIC(")"),
+    .handler = preprocess_shell,
+};
+
+Directive head = {
+    .open = SV_STATIC("%"),
+    .handler = preprocess_head,
+};
+
+Directive title = {
+    .open = SV_STATIC("%title "),
+    .handler = preprocess_title,
+};
+
+Directive meta = {
+    .open = SV_STATIC("%meta "),
+    .handler = preprocess_meta,
+};
+
+String_View
+parse_substitution(String_View *sv)
+{
+    size_t index = 0;
+    if (!index_of_delim(*sv, shell.close, &index)) {
+        die("ERROR: Shell substring was not closed!\n");
+    }
+
+    String_View cmd = sv_chop_left(sv, index);
+    String_View slice = cmd;
+    // Nested substitutions found
+    while (index_of_delim(slice, shell.open, &index)) {
+        // Find something to close it
+        if (!index_of_delim(*sv, shell.close, &index)) {
+            die("ERROR: Shell substring was not closed!\n");
+        }
+        // Extend cmd to enclose closing delim
+        slice = sv_chop_left(sv, index + shell.close.count);
+        cmd.count += slice.count;
+    }
+
+    return unescape(sv_trim_right(cmd));
+}
+
+
 void
 preprocess(Context *ctx)
 {
@@ -243,17 +250,17 @@ preprocess(Context *ctx)
         }
 
         if (sv_eq(sv_trim_right(sv), head.open)) {
-            preprocess_head(ctx, sv);
+            head.handler(ctx, sv);
             sv.count = 0; // Ignore trailing whitespace
         }
 
         if (sv_starts_with(sv, title.open)) {
             sv_chop_left(&sv, title.open.count);
-            preprocess_title(ctx, sv);
+            title.handler(ctx, sv);
             sv.count = 0; // Done parsing this line
         } else if (sv_starts_with(sv, meta.open)) {
             sv_chop_left(&sv, meta.open.count);
-            preprocess_meta(ctx, sv);
+            meta.handler(ctx, sv);
             sv.count = 0;
         }
 
@@ -261,7 +268,7 @@ preprocess(Context *ctx)
         while (sv.count > 0) {
             if (!ctx->in_code_block && sv_starts_with(sv, shell.open)) {
                 sv_chop_left(&sv, shell.open.count);
-                preprocess_shell(ctx, parse_substitution(&sv));
+                shell.handler(ctx, parse_substitution(&sv));
                 sv_chop_left(&sv, shell.close.count); // Advance past closing delim
             } else {
                 // TODO: We should only escape directives we define.
